@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infra-config-backup
+
+data:
+  config.yaml: |
+    git:
+      repo: "git@github.com:<user>/infra-backups.git"
+      branch: "main"
+
+      author:
+        name: "Infrastructure Config Backup"
+        email: "infra-backup@local"
+
+    dry_run: false
+
+    providers:
+      - type: pfsense
+        name: primary
+        host: "pfsense.example.com"
+        username: "${PFSENSE_USER}"
+        password: "${PFSENSE_PASS}"
+        tls: true
+        keep_rrd: false
+
+      - type: portainer
+        name: main
+        url: "https://portainer.example.com"
+
+        # Option 1: Use an API key
+        api_key: "${PORTAINER_API_KEY}"
+        # Option 2: Use a username/password
+        username: "${PORTAINER_USER}"
+        password: "${PORTAINER_PASS}"
+
+        timeout: 30
+        tls: true
+
+      - type: truenas
+        name: primary
+        host: "truenas.example.com"
+        api_key: "${TRUENAS_API_KEY}"
+        tls: true
+
+      - type: unifi
+        name: controller
+        url: "https://unifi.example.com"
+        timeout: 30
+        tls: false

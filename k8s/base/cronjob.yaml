@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: infra-config-backup
+
+spec:
+  schedule: "${CRON_SCHEDULE}"
+
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+
+          containers:
+            - name: backup
+              image: "${IMAGE}"
+
+              env:
+                - name: CONFIG_FILE
+                  value: /config/config.yaml
+
+              envFrom:
+                - secretRef:
+                    name: infra-config-backup-secrets
+
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+
+          volumes:
+            - name: config
+              configMap:
+                name: infra-config-backup
