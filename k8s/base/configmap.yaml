@@ -15,8 +15,8 @@ data:
         email: "infra-backup@local"
 
       ssh:
-        key: "${GIT_SSH_KEY}"
-        known_hosts: "${GIT_KNOWN_HOSTS}"
+        key: "/config/ssh/id_ed25519"
+        known_hosts: "/config/ssh/known_hosts"
 
     dry_run: false
 
