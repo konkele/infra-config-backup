@@ -1,7 +1,7 @@
+import json
 import os
 import subprocess
 import tempfile
-import json
 from pathlib import Path
 from typing import Optional
 
@@ -23,17 +23,25 @@ class GitRepo:
         if self.path is not None:
             raise GitError("already cloned")
 
-        self._workspace = tempfile.TemporaryDirectory(prefix="infra-config-backup-")
+        self._workspace = tempfile.TemporaryDirectory(
+            prefix="infra-config-backup-"
+        )
         self.path = Path(self._workspace.name)
 
         try:
-            self._run([
-                "git", "clone",
-                "--depth", "1",
-                "--branch", self._config.branch,
-                self._config.repo,
-                str(self.path),
-            ], cwd=None)
+            self._run(
+                [
+                    "git",
+                    "clone",
+                    "--depth",
+                    "1",
+                    "--branch",
+                    self._config.branch,
+                    self._config.repo,
+                    str(self.path),
+                ],
+                cwd=None,
+            )
 
             self._configure_identity()
 
@@ -43,6 +51,7 @@ class GitRepo:
 
     def cleanup(self) -> None:
         self.path = None
+
         if self._workspace:
             self._workspace.cleanup()
             self._workspace = None
@@ -74,7 +83,6 @@ class GitRepo:
         result: BackupResult,
         dry_run: bool,
     ) -> bool:
-
         if dry_run:
             return False
 
@@ -98,6 +106,8 @@ class GitRepo:
             cwd=repo,
             capture_output=True,
             text=True,
+            check=True,
+            env=self._git_env(),
         )
 
         if not status.stdout.strip():
@@ -108,52 +118,66 @@ class GitRepo:
 
         return True
 
-    def _configure_identity(self):
+    def _configure_identity(self) -> None:
         repo = self._require_repo()
-
-        author = self._config.author or {}
+        author = self._config.author
 
         if author.get("name"):
-            self._run(["git", "config", "user.name", author["name"]], cwd=repo)
+            self._run(
+                ["git", "config", "user.name", author["name"]],
+                cwd=repo,
+            )
 
         if author.get("email"):
-            self._run(["git", "config", "user.email", author["email"]], cwd=repo)
+            self._run(
+                ["git", "config", "user.email", author["email"]],
+                cwd=repo,
+            )
 
     def _require_repo(self) -> Path:
         if not self.path:
             raise GitError("not cloned")
+
         return self.path
 
     def _git_env(self) -> dict[str, str]:
         """
         Build the environment for git commands.
 
-        If ssh_key is configured, use it via GIT_SSH_COMMAND.
-        Otherwise, fall back to the user's normal ~/.ssh configuration.
+        If an SSH key is configured, use it via GIT_SSH_COMMAND.
+        Otherwise, fall back to the normal SSH configuration.
         """
         env = os.environ.copy()
 
-        ssh_key = getattr(self._config, "ssh_key", None)
+        ssh_key = self._config.ssh.key
+        known_hosts = self._config.ssh.known_hosts
+
         if not ssh_key:
             return env
 
         cmd = [
             "ssh",
-            "-i", ssh_key,
-            "-o", "IdentitiesOnly=yes",
+            "-i",
+            ssh_key,
+            "-o",
+            "IdentitiesOnly=yes",
         ]
 
-        known_hosts = getattr(self._config, "known_hosts", None)
         if known_hosts:
-            cmd.extend([
-                "-o", "StrictHostKeyChecking=yes",
-                "-o", f"UserKnownHostsFile={known_hosts}",
-            ])
+            cmd.extend(
+                [
+                    "-o",
+                    "StrictHostKeyChecking=yes",
+                    "-o",
+                    f"UserKnownHostsFile={known_hosts}",
+                ]
+            )
 
         env["GIT_SSH_COMMAND"] = " ".join(cmd)
+
         return env
 
-    def _run(self, cmd, cwd):
+    def _run(self, cmd: list[str], cwd: Optional[Path]) -> None:
         try:
             subprocess.run(
                 cmd,
@@ -164,7 +188,9 @@ class GitRepo:
                 env=self._git_env(),
             )
         except subprocess.CalledProcessError as e:
-            raise GitError(e.stderr or e.stdout or "git error") from e
+            raise GitError(
+                e.stderr or e.stdout or "git error"
+            ) from e
 
     def __enter__(self):
         self.clone()
