@@ -1,46 +1,182 @@
+# Infrastructure Config Backup
+#
+# Copy this file to:
+#
+#   config/config.yaml
+#
+# Docker:
+#   Mount config/config.yaml at /config/config.yaml
+#
+# Kubernetes:
+#   This file can be mounted from a ConfigMap.
+#   Secrets should be supplied separately as environment variables.
+#
+# Environment variables use the ${VARIABLE} syntax.
+# Missing variables cause startup to fail.
+
+# ---------------------------------------------------------------------------
+# Git repository
+# ---------------------------------------------------------------------------
+
 git:
-  repo: "git@github.com:YOUR_ORG/infra-backups.git"
+  repo: "git@github.com:example/infra-backups.git"
   branch: "main"
 
   author:
-    name: "infra-backup"
-    email: "infra@local"
+    name: "Infrastructure Backup"
+    email: "backup@example.com"
 
-# Optional global dry run (applies to all providers unless overridden)
+  ssh:
+    # Path to the SSH private key inside the container.
+    #
+    # Docker example:
+    #   /config/ssh/id_ed25519
+    #
+    # Kubernetes example:
+    #   /var/run/secrets/ssh/id_ed25519
+    key: "${GIT_SSH_KEY}"
+
+    # Optional known_hosts file.
+    #
+    # If omitted, SSH uses its normal host-key configuration.
+    known_hosts: "${GIT_KNOWN_HOSTS}"
+
+
+# ---------------------------------------------------------------------------
+# Global options
+# ---------------------------------------------------------------------------
+
+# When true, backups are collected but are not written to the Git
+# repository and no commit is pushed.
 dry_run: false
 
+
+# ---------------------------------------------------------------------------
+# Providers
+# ---------------------------------------------------------------------------
+#
+# Each entry represents one provider instance.
+#
+# Providers are optional:
+#
+#   providers: []
+#
+# Multiple instances of the same provider type are supported.
+# The "name" field identifies each instance and is used when storing
+# backup artifacts.
+#
+# Example output:
+#
+#   pfsense/
+#     firewall-backup.xml
+#     firewall-metadata.json
+#
+#   truenas/
+#     storage-backup.tar
+#     storage-metadata.json
+#
+# ---------------------------------------------------------------------------
+
 providers:
-  - type: pfsense
-    name: primary
-    host: pfsense.lab
-    username: ${PFSENSE_USER}
-    password: ${PFSENSE_PASS}
+
+  # -------------------------------------------------------------------------
+  # pfSense
+  # -------------------------------------------------------------------------
+  #
+  # Authentication uses username/password.
+  #
+  # Multiple pfSense instances can be configured by adding additional
+  # entries with unique names.
+  #
+  - type: "pfsense"
+    name: "firewall"
+
+    host: "firewall.example.com"
+
+    username: "${PFSENSE_FIREWALL_USERNAME}"
+    password: "${PFSENSE_FIREWALL_PASSWORD}"
+
+    # Verify the TLS certificate.
     tls: true
+
+    # Include RRD data in the backup.
     keep_rrd: false
-    dry_run: false
 
-  - type: portainer
-    name: portainer-main
-    url: https://portainer.example.com
-    # Option 1: Use an API key
-    api_key: ${PORTAINER_API_KEY}
-    # Option 2: Use username/password
-    username: ${PORTAINER_USER}
-    password: ${PORTAINER_PASS}
-    timeout: 30
+
+  # -------------------------------------------------------------------------
+  # TrueNAS
+  # -------------------------------------------------------------------------
+  #
+  # Authentication uses an API key.
+  #
+  - type: "truenas"
+    name: "storage"
+
+    host: "truenas.example.com"
+
+    api_key: "${TRUENAS_STORAGE_API_KEY}"
+
     tls: true
-    dry_run: false
 
-  - type: truenas
-    name: primary
-    host: truenas.lab
-    api_key: ${TRUENAS_API_KEY}
+
+  # -------------------------------------------------------------------------
+  # Portainer
+  # -------------------------------------------------------------------------
+  #
+  # API key authentication is preferred.
+  #
+  # Alternatively, remove api_key and provide:
+  #
+  #   username: "${PORTAINER_DOCKER_USERNAME}"
+  #   password: "${PORTAINER_DOCKER_PASSWORD}"
+  #
+  - type: "portainer"
+    name: "docker"
+
+    url: "https://portainer.example.com"
+
+    api_key: "${PORTAINER_DOCKER_API_KEY}"
+
     tls: true
-    dry_run: false
-
-  - type: unifi
-    name: unifi-controller
-    url: http://unifi-backup-exporter.unifi.svc.cluster.local:8081
     timeout: 30
+
+
+  # -------------------------------------------------------------------------
+  # UniFi
+  # -------------------------------------------------------------------------
+  #
+  # This provider connects to the existing UniFi backup exporter.
+  #
+  - type: "unifi"
+    name: "network"
+
+    url: "http://unifi-exporter:8080"
+
     tls: false
-    dry_run: false
+    timeout: 30
+
+
+# ---------------------------------------------------------------------------
+# Additional provider instances
+# ---------------------------------------------------------------------------
+#
+# To add another instance, simply add another provider entry.
+#
+# Example:
+#
+#   - type: "pfsense"
+#     name: "firewall-secondary"
+#     host: "firewall2.example.com"
+#     username: "${PFSENSE_SECONDARY_USERNAME}"
+#     password: "${PFSENSE_SECONDARY_PASSWORD}"
+#     tls: true
+#
+# Or:
+#
+#   - type: "truenas"
+#     name: "storage-secondary"
+#     host: "truenas2.example.com"
+#     api_key: "${TRUENAS_SECONDARY_API_KEY}"
+#     tls: true
+#
+# ---------------------------------------------------------------------------

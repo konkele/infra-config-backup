@@ -1,137 +1,93 @@
-# infra-config-backup — Kubernetes Templates
+# infra-config-backup — Kubernetes
 
-This directory contains a **public-safe Kubernetes template layer** for deploying `infra-config-backup`.
+Kubernetes manifests for deploying `infra-config-backup` using Kustomize, Infisical, and a scheduled CronJob.
 
-It is designed to be:
+## Structure
 
-- Fully generic (no environment-specific values)
-- Safe for public repositories
-- Compatible with Kustomize / ArgoCD overlays
-- Driven entirely by external configuration and secrets
-
----
-
-## ⚙️ Design
-
-This is a **base-only manifest layer**.
-
-All environment-specific values should be injected externally using:
-
-- Kustomize overlays
-- CI/CD variable substitution
-- ArgoCD Applications
-- Infisical-managed Kubernetes Secrets
-
-The manifests are intentionally generic so they can be reused across multiple environments without modification.
-
----
-
-## 🔐 Secrets
-
-Secrets are managed externally using the **Infisical Operator**.
-
-This repository includes an `InfisicalSecret` resource that synchronizes secrets into a Kubernetes Secret consumed by the application.
-
-No secret values are stored in this repository.
-
----
-
-## 📦 Structure
-
-The `base/` directory contains:
-
-- `namespace.yaml` — application namespace
-- `configmap.yaml` — application configuration template
-- `deployment.yaml` — optional continuously running deployment
-- `cronjob.yaml` — recommended scheduled backup execution
-- `infisicalsecret.yaml` — Infisical secret synchronization
-- `kustomization.yaml` — Kustomize entry point
-
----
-
-## 🧪 Usage
-
-### Kustomize
-
-This directory is intended to be consumed through overlays:
-
-```text
 k8s/
 ├── base/
-└── overlays/
-    ├── dev/
-    └── prod/
-```
+│   ├── configmap.yaml
+│   ├── cronjob.yaml
+│   ├── infisicalsecret.yaml
+│   ├── kustomization.yaml
+│   └── namespace.yaml
+├── dev/
+│   ├── configmap.yaml
+│   ├── kustomization.yaml
+│   └── patch-infisicalsecret.yaml
+└── README.md
 
-The base manifests should remain environment agnostic.
+## Design
 
----
+The `base/` manifests define the common Kubernetes resources:
 
-### Configuration
+- Namespace
+- ConfigMap
+- CronJob
+- InfisicalSecret
 
-Application configuration is supplied through the ConfigMap.
+Environment-specific configuration is provided through Kustomize overlays.
 
-Values such as repository locations, provider hosts, and image references are intended to be customized by overlays or deployment pipelines.
+The application runs as a short-lived CronJob rather than a continuously running service.
 
-Examples include:
+## Configuration
 
-- `${IMAGE}`
-- `${CRON_SCHEDULE}`
-- `${INFISICAL_HOST}`
-- `${INFISICAL_PROJECT}`
-- `${INFISICAL_ENV}`
-- `${INFISICAL_PATH}`
-- `${INFISICAL_AUTH_SECRET}`
-- `${INFISICAL_AUTH_NAMESPACE}`
+Application configuration is stored in a ConfigMap.
 
-Provider credentials are supplied through the synchronized Kubernetes Secret rather than the ConfigMap.
+Sensitive values are referenced using environment variables such as:
 
----
+${GIT_SSH_KEY}
+${GIT_KNOWN_HOSTS}
+${PFSENSE_FIREWALL_USERNAME}
+${PFSENSE_FIREWALL_PASSWORD}
 
-## 🚀 Execution
+Secrets are not stored directly in the ConfigMap.
 
-Two execution models are provided:
+## Secrets
 
-### CronJob (Recommended)
+Secrets are managed by the Infisical Operator.
 
-- Stateless execution
-- Scheduled backups
-- Automatically creates short-lived Pods
-- Ideal for periodic infrastructure backups
+The `InfisicalSecret` resource synchronizes the configured Infisical environment into a Kubernetes Secret. The CronJob consumes that Secret through `envFrom`.
 
-### Deployment
+This includes Git SSH credentials and provider credentials.
 
-- Continuously running container
-- Useful for development, testing, or debugging
-- Not typically required for production backup workflows
+## Environments
 
----
+### Dev
 
-## 🔄 GitOps
+The development overlay is intended for integration and provider testing.
 
-The manifests are designed for GitOps workflows using tools such as:
+It can override:
 
-- ArgoCD
-- Kustomize
-- Infisical Operator
+- Application configuration
+- Container image
+- Infisical environment
+- CronJob behavior
 
-Environment-specific customization should live in overlays or deployment repositories rather than this base.
+Development execution can be triggered manually while the scheduled CronJob remains suspended.
 
----
+### Prod
 
-## ⚠️ Security
+The production overlay is intended for scheduled backups.
 
-This repository contains:
+It inherits the common CronJob configuration and enables scheduled execution.
 
-✔ No secrets  
-✔ No credentials  
-✔ No production infrastructure endpoints  
-✔ No cluster-specific configuration  
+## GitOps
 
-It is safe to publish publicly.
+The manifests are designed to work with Kustomize and GitOps tooling such as ArgoCD.
 
----
+A typical deployment flow is:
 
-## 📌 Summary
+Kustomize Overlay
+       │
+       ▼
+   Kubernetes
+       │
+       ├── ConfigMap
+       ├── InfisicalSecret
+       └── CronJob
+               │
+               ▼
+        infra-config-backup
 
-This Kubernetes directory provides a reusable, template-based deployment for **infra-config-backup** that integrates cleanly with GitOps workflows, external secret management, and environment-specific overlays while keeping the base manifests portable and safe for public repositories.
+Environment-specific values should remain in their respective overlays, while shared workload configuration belongs in `base/`.

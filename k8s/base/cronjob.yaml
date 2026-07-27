@@ -2,19 +2,28 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: infra-config-backup
+  namespace: infra-config-backup
 
 spec:
-  schedule: "${CRON_SCHEDULE}"
+  schedule: "0 4 * * *"
+  suspend: false
+
+  concurrencyPolicy: Forbid
+
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
 
   jobTemplate:
     spec:
+      backoffLimit: 2
+
       template:
         spec:
           restartPolicy: Never
 
           containers:
             - name: backup
-              image: "${IMAGE}"
+              image: infra-config-backup:latest
 
               env:
                 - name: CONFIG_FILE
