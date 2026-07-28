@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: infra-config-backup
+
+resources:
+  - ../base
+
+images:
+  - name: infra-config-backup
+    newName: registry.example.com/infra/infra-config-backup
+    newTag: latest
+
+patches:
+  - path: configmap.yaml
+  - path: patch-infisicalsecret.yaml
+  - path: patch-cronjob.yaml

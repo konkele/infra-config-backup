@@ -4,6 +4,7 @@ Kubernetes manifests for deploying `infra-config-backup` using Kustomize, Infisi
 
 ## Structure
 
+```text
 k8s/
 ├── base/
 │   ├── configmap.yaml
@@ -14,80 +15,153 @@ k8s/
 ├── dev/
 │   ├── configmap.yaml
 │   ├── kustomization.yaml
+│   ├── patch-cronjob.yaml
 │   └── patch-infisicalsecret.yaml
 └── README.md
+```
 
 ## Design
 
-The `base/` manifests define the common Kubernetes resources:
+The Kubernetes manifests follow a Kustomize base/overlay layout.
+
+The `base/` directory contains the shared workload definition that is intended to be reused across environments, including:
 
 - Namespace
 - ConfigMap
-- CronJob
 - InfisicalSecret
+- CronJob
 
-Environment-specific configuration is provided through Kustomize overlays.
+Environment-specific behavior is implemented through overlays that patch or replace only the resources that differ.
 
-The application runs as a short-lived CronJob rather than a continuously running service.
+The application is designed to execute as a short-lived Kubernetes `CronJob` rather than a continuously running deployment.
 
 ## Configuration
 
-Application configuration is stored in a ConfigMap.
+Application configuration is provided through a ConfigMap containing `config.yaml`.
 
-Sensitive values are referenced using environment variables such as:
+Typical configuration includes:
 
+- Git repository settings
+- Commit author information
+- SSH key locations
+- Runtime options
+- Provider definitions
+
+Sensitive values should be referenced through environment variables, for example:
+
+```yaml
 ${GIT_SSH_KEY}
 ${GIT_KNOWN_HOSTS}
-${PFSENSE_FIREWALL_USERNAME}
-${PFSENSE_FIREWALL_PASSWORD}
+${PFSENSE_USER}
+${PFSENSE_PASS}
+${TRUENAS_API_KEY}
+${PORTAINER_API_KEY}
+```
 
-Secrets are not stored directly in the ConfigMap.
+Secrets should never be committed directly into the ConfigMap.
 
 ## Secrets
 
-Secrets are managed by the Infisical Operator.
+Secrets are synchronized into Kubernetes using the Infisical Operator.
 
-The `InfisicalSecret` resource synchronizes the configured Infisical environment into a Kubernetes Secret. The CronJob consumes that Secret through `envFrom`.
+The `InfisicalSecret` resource creates and maintains a Kubernetes Secret containing all required credentials.
 
-This includes Git SSH credentials and provider credentials.
+The CronJob consumes these secrets via `envFrom`, while Git SSH credentials are mounted as files for SSH-based repository authentication.
+
+Typical secret categories include:
+
+- Git SSH credentials
+- Firewall credentials
+- Storage platform API keys
+- Infrastructure platform API keys
 
 ## Environments
 
-### Dev
+### Base
 
-The development overlay is intended for integration and provider testing.
+The base manifests define the common deployment shared by every environment.
 
-It can override:
+Responsibilities include:
+
+- Namespace creation
+- Default application configuration
+- Secret synchronization
+- CronJob definition
+- Security context
+- Volume mounts
+- Secret mounting
+
+### Development
+
+The development overlay is intended for testing and validation.
+
+It can customize:
 
 - Application configuration
-- Container image
+- Container image and tag
 - Infisical environment
-- CronJob behavior
+- CronJob schedule
+- CronJob suspend state
 
-Development execution can be triggered manually while the scheduled CronJob remains suspended.
+This allows developers to run backups on a more frequent schedule or manually trigger Jobs without modifying the shared base manifests.
 
-### Prod
+The development overlay should contain only environment-specific configuration and should avoid embedding organization-specific or sensitive information.
 
-The production overlay is intended for scheduled backups.
+### Production
 
-It inherits the common CronJob configuration and enables scheduled execution.
+A production overlay can inherit the shared base configuration while overriding only the values required for production, such as:
+
+- Image tag
+- Secret environment
+- Backup schedule
+- Runtime configuration
 
 ## GitOps
 
-The manifests are designed to work with Kustomize and GitOps tooling such as ArgoCD.
+The manifests are designed for GitOps workflows using Kustomize with tools such as Argo CD or Flux.
 
-A typical deployment flow is:
+Typical deployment flow:
 
-Kustomize Overlay
-       │
-       ▼
-   Kubernetes
-       │
-       ├── ConfigMap
-       ├── InfisicalSecret
-       └── CronJob
+```text
+            Overlay
                │
                ▼
-        infra-config-backup
+          Kustomize Build
+               │
+               ▼
+          Kubernetes API
+               │
+      ┌────────┴────────┐
+      │                 │
+      ▼                 ▼
+ ConfigMap      InfisicalSecret
+      │                 │
+      └────────┬────────┘
+               ▼
+            CronJob
+               │
+               ▼
+    infra-config-backup
+```
 
-Environment-specific values should remain in their respective overlays, while shared workload configuration belongs in `base/`.
+## Overlay Responsibilities
+
+As a general guideline:
+
+**Base**
+
+- Shared Kubernetes resources
+- Default application configuration
+- Security settings
+- Secret integration
+- Common CronJob definition
+
+**Overlay**
+
+- Environment-specific configuration
+- Container image selection
+- Scheduling changes
+- Secret environment selection
+- Runtime overrides
+
+Keeping this separation minimizes duplication and makes new environments easy to add while ensuring shared infrastructure remains consistent.

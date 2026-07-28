@@ -1,34 +1,7 @@
-# infra-config-backup
+# Infrastructure Configuration Backup
 
 A template-driven infrastructure backup system designed for GitOps and
 Kubernetes.
-
-------------------------------------------------------------------------
-
-## 📦 Project Structure
-
-    ├── config
-    │   └── config.example.yaml
-    ├── k8s
-    │   ├── base
-    │   │   ├── configmap.yaml
-    │   │   ├── cronjob.yaml
-    │   │   ├── deployment.yaml
-    │   │   ├── infisicalsecret.yaml
-    │   │   ├── kustomization.yaml
-    │   │   └── namespace.yaml
-    │   └── README.md
-    ├── src
-    │   └── infra_config_backup
-    │       ├── providers
-    │       ├── config.py
-    │       ├── engine.py
-    │       ├── git.py
-    │       ├── main.py
-    │       └── models.py
-    ├── Dockerfile
-    ├── pyproject.toml
-    └── README.md
 
 ------------------------------------------------------------------------
 
@@ -39,27 +12,35 @@ systems and commits them to Git.
 
 Key design goals:
 
--   Git-backed audit history
--   Kubernetes-native execution
--   Pluggable provider architecture
--   External secret injection (Infisical / ExternalSecrets)
--   Fully template-driven deployment
+- Git-backed audit history
+- Kubernetes-native execution
+- Pluggable provider architecture
+- External secret injection (Infisical / ExternalSecrets)
+- Fully template-driven deployment
 
 ------------------------------------------------------------------------
 
 ## ☸️ Kubernetes Design
 
-This repository provides a **public-safe base layer**:
+This repository provides a **public-safe Kubernetes base**:
 
--   No secrets
--   No environment-specific values
--   No real endpoints
--   Fully templated with `${VARIABLES}`
+- No embedded secrets
+- No organization-specific configuration
+- Shared resources managed through Kustomize
+- Environment-specific customization through overlays
 
-Deployment modes:
+Deployment mode:
 
-- CronJob (recommended)
-- Deployment (optional long-running mode)
+- CronJob
+
+The Kubernetes manifests follow a Kustomize base/overlay layout:
+
+```text
+k8s/
+├── base/      # Shared manifests
+├── <overlay>/ # Environment-specific overrides
+└── README.md
+```
 
 ------------------------------------------------------------------------
 
@@ -67,15 +48,15 @@ Deployment modes:
 
 All secrets must be injected externally:
 
--   Infisical
--   ExternalSecrets Operator
--   CSI Secret Store
+- Infisical
+- ExternalSecrets Operator
+- CSI Secret Store
 
-This repo only defines *how secrets are consumed*, not stored.
+This repository defines *how secrets are consumed*, not stored.
 
 ------------------------------------------------------------------------
 
-### 🗂️ Git Configuration
+## 🗂️ Git Configuration
 
 The application stores all backup artifacts in a Git repository.
 
@@ -88,20 +69,19 @@ git:
     name: infra-backup
     email: infra@example.com
 
-  # Optional SSH configuration
-  # If omitted, the local user's standard ~/.ssh configuration is used.
-  ssh_key: /etc/git-ssh/id_ed25519
-  known_hosts: /etc/git-ssh/known_hosts
+  ssh:
+    key: /etc/git-ssh/id_ed25519
+    known_hosts: /etc/git-ssh/known_hosts
 ```
 
-| Setting | Required | Description |
-|----------|----------|-------------|
-| `repo` | Yes | Git repository to clone and push backups to. HTTPS repositories are supported by Git, but SSH repositories (git@...) are recommended for unattended automation. |
-| `branch` | No | Target branch. Defaults to `main`. |
-| `author.name` | No | Git commit author name. |
-| `author.email` | No | Git commit author email. |
-| `ssh_key` | No | Path to a private SSH deploy key. When omitted, Git uses the standard local SSH configuration (`~/.ssh`). |
-| `known_hosts` | No | Optional OpenSSH `known_hosts` file. If omitted, the system default is used. |
+| Setting             | Required | Description                                                                                                                                                       |
+|---------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `repo`              | Yes      | Git repository to clone and push backups to. HTTPS repositories are supported by Git, but SSH repositories (`git@...`) are recommended for unattended automation. |
+| `branch`            | No       | Target branch. Defaults to `main`.                                                                                                                                |
+| `author.name`       | No       | Git commit author name.                                                                                                                                           |
+| `author.email`      | No       | Git commit author email.                                                                                                                                          |
+| `ssh.key`           | No       | Path to a private SSH deploy key. When omitted, Git uses the standard local SSH configuration (`~/.ssh`).                                                         |
+| `ssh.known_hosts`   | No       | Optional OpenSSH `known_hosts` file. If omitted, the system default is used.                                                                                      |
 
 ------------------------------------------------------------------------
 
@@ -113,7 +93,7 @@ The application supports two authentication modes.
 
 No additional configuration is required.
 
-If `git.ssh_key` is not configured, Git behaves exactly as it normally would and uses the current user's SSH configuration, including:
+If `git.ssh.key` is not configured, Git behaves exactly as it normally would and uses the current user's SSH configuration, including:
 
 - `~/.ssh/id_ed25519`
 - `~/.ssh/config`
@@ -128,7 +108,7 @@ For Kubernetes deployments, it is recommended to mount an SSH deploy key as a Se
 
 Example:
 
-```
+```text
 /etc/git-ssh/
 ├── id_ed25519
 └── known_hosts
@@ -138,8 +118,9 @@ Then configure:
 
 ```yaml
 git:
-  ssh_key: /etc/git-ssh/id_ed25519
-  known_hosts: /etc/git-ssh/known_hosts
+  ssh:
+    key: /etc/git-ssh/id_ed25519
+    known_hosts: /etc/git-ssh/known_hosts
 ```
 
 The application automatically configures Git to use the mounted key for clone and push operations.
@@ -159,7 +140,7 @@ Example secrets:
 
 Mount these secrets into the container as read-only files, for example:
 
-```
+```text
 /etc/git-ssh/id_ed25519
 /etc/git-ssh/known_hosts
 ```
@@ -168,8 +149,9 @@ and configure the application:
 
 ```yaml
 git:
-  ssh_key: /etc/git-ssh/id_ed25519
-  known_hosts: /etc/git-ssh/known_hosts
+  ssh:
+    key: /etc/git-ssh/id_ed25519
+    known_hosts: /etc/git-ssh/known_hosts
 ```
 
 If these options are omitted, the application falls back to the standard SSH configuration available to the current user.
@@ -207,23 +189,44 @@ export CONFIG_FILE=config/config.yaml
 infra-config-backup
 ```
 
+### 🐳 Docker
+
+Create a configuration file from the provided example:
+
+```bash
+cp config/config.example.yaml config/config.yaml
+```
+
+Export any required environment variables referenced by the configuration, then run the container:
+
+```bash
+docker run --rm \
+  -e CONFIG_FILE=/config/config.yaml \
+  --env-file .env \
+  -v "$(pwd)/config:/config:ro" \
+  ghcr.io/YOUR_ORG/infra-config-backup:latest
+```
+
+Alternatively, mount an SSH key directory if Git authentication requires it:
+
+```bash
+docker run --rm \
+  -e CONFIG_FILE=/config/config.yaml \
+  --env-file .env \
+  -v "$(pwd)/config:/config:ro" \
+  -v "$(pwd)/ssh:/etc/git-ssh:ro" \
+  ghcr.io/YOUR_ORG/infra-config-backup:latest
+```
+
 ### ☸️ Kubernetes
-
-The repository includes a reusable Kubernetes base along with environment-specific overlays.
-
-```
-k8s/
-├── base
-├── dev
-└── prod
-```
 
 The recommended deployment model is:
 
-- Base manifests committed to Git
-- Environment-specific customization with Kustomize
+- Shared base manifests
+- Environment-specific Kustomize overlays
 - Secrets injected by Infisical (or another external secret provider)
 - Configuration provided through a ConfigMap
+- Scheduled execution via a Kubernetes CronJob
 
 ------------------------------------------------------------------------
 
@@ -233,16 +236,16 @@ Backups are organized by provider type. Each provider instance produces a backup
 
 ```text
 infra-backups/
-├── pfsense
+├── pfsense/
 │   ├── primary-backup.xml
 │   └── primary-metadata.json
-├── portainer
+├── portainer/
 │   ├── main-backup.tar.gz
 │   └── main-metadata.json
-├── truenas
+├── truenas/
 │   ├── primary-backup.tar
 │   └── primary-metadata.json
-└── unifi
+└── unifi/
     ├── controller-backup.unf
     └── controller-metadata.json
 ```
@@ -286,13 +289,3 @@ Supported providers:
 - UniFi
 
 Each provider writes a deterministic backup filename along with a corresponding metadata file describing the backup.
-
-------------------------------------------------------------------------
-
-## 📌 Philosophy
-
-- Stateless execution
-- Immutable provider results
-- Externalized configuration
-- Deterministic backups
-- Git as the source of truth

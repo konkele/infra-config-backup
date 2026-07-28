@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infra-config-backup
+  namespace: infra-config-backup
+
+data:
+  config.yaml: |
+    git:
+      repo: "git@github.com:<org>/infra-backups.git"
+      branch: "main"
+
+      author:
+        name: "Infrastructure Backup"
+        email: "infra-backup@example.com"
+
+      ssh:
+        key: "/config/ssh/id_ed25519"
+        known_hosts: "/config/ssh/known_hosts"
+
+    dry_run: true
+
+    providers:
+      - type: "pfsense"
+        name: "firewall-primary"
+        host: "pfsense.example.com"
+        username: "${PFSENSE_USER}"
+        password: "${PFSENSE_PASS}"
+        tls: true
+        keep_rrd: false
+
+      - type: "truenas"
+        name: "storage-primary"
+        host: "truenas.example.com"
+        api_key: "${TRUENAS_API_KEY}"
+        tls: true
+
+      - type: "portainer"
+        name: "portainer"
+        url: "https://portainer.example.com"
+        api_key: "${PORTAINER_API_KEY}"
+        tls: true
+        timeout: 30
+
+      - type: "unifi"
+        name: "unifi-controller"
+        url: "http://unifi-backup-exporter.unifi.svc.cluster.local:8081"
+        tls: false
+        timeout: 30

@@ -1,0 +1,8 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: infra-config-backup
+  namespace: infra-config-backup
+
+spec:
+  schedule: "30 20 * * *"
